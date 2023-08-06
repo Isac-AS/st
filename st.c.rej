@@ -1,0 +1,146 @@
+--- st.c
++++ st.c
+@@ -1017,116 +950,51 @@ tcursor(int mode)
+ 	}
+ }
+ 
+-void
+-tresetcursor(void)
+-{
+-	term.c = (TCursor){ { .mode = ATTR_NULL, .fg = defaultfg, .bg = defaultbg },
+-	                    .x = 0, .y = 0, .state = CURSOR_DEFAULT };
+-}
+-
+ void
+ treset(void)
+ {
+ 	uint i;
+-  int x, y;
+ 
+-	tresetcursor();
++	term.c = (TCursor){{
++		.mode = ATTR_NULL,
++		.fg = defaultfg,
++		.bg = defaultbg
++	}, .x = 0, .y = 0, .state = CURSOR_DEFAULT};
+ 
+ 	memset(term.tabs, 0, term.col * sizeof(*term.tabs));
+ 	for (i = tabspaces; i < term.col; i += tabspaces)
+ 		term.tabs[i] = 1;
+ 	term.top = 0;
+-	term.histf = 0;
+-	term.scr = 0;
+ 	term.bot = term.row - 1;
+ 	term.mode = MODE_WRAP|MODE_UTF8;
+ 	memset(term.trantbl, CS_USA, sizeof(term.trantbl));
+ 	term.charset = 0;
+ 
+-  selremove();
+ 	for (i = 0; i < 2; i++) {
+-  	tcursor(CURSOR_SAVE); /* reset saved cursor */
+-		for (y = 0; y < term.row; y++)
+-			for (x = 0; x < term.col; x++)
+-				tclearglyph(&term.line[y][x], 0);
++		tmoveto(0, 0);
++		tcursor(CURSOR_SAVE);
++		tclearregion(0, 0, term.col-1, term.row-1);
+ 		tswapscreen();
+ 	}
+-  tfulldirt();
+ }
+ 
+ void
+ tnew(int col, int row)
+ {
+-	int i, j;
+-
+-	for (i = 0; i < 2; i++) {
+-		term.line = xmalloc(row * sizeof(Line));
+-		for (j = 0; j < row; j++)
+-			term.line[j] = xmalloc(col * sizeof(Glyph));
+-		term.col = col, term.row = row;
+-		tswapscreen();
+-	}
+-	term.dirty = xmalloc(row * sizeof(*term.dirty));
+-	term.tabs = xmalloc(col * sizeof(*term.tabs));
+-	for (i = 0; i < HISTSIZE; i++)
+-		term.hist[i] = xmalloc(col * sizeof(Glyph));
+-  treset();
++	term = (Term){ .c = { .attr = { .fg = defaultfg, .bg = defaultbg } } };
++	tresize(col, row);
++	treset();
+ }
+ 
+-/* handle it with care */
+ void
+ tswapscreen(void)
+ {
+-	static Line *altline;
+-	static int altcol, altrow;
+-	Line *tmpline = term.line;
+-	int tmpcol = term.col, tmprow = term.row;
++	Line *tmp = term.line;
+ 
+-	term.line = altline;
+-	term.col = altcol, term.row = altrow;
+-	altline = tmpline;
+-	altcol = tmpcol, altrow = tmprow;
++	term.line = term.alt;
++	term.alt = tmp;
+ 	term.mode ^= MODE_ALTSCREEN;
+-}
+-
+-void
+-tloaddefscreen(int clear, int loadcursor)
+-{
+-	int col, row, alt = IS_SET(MODE_ALTSCREEN);
+-
+-	if (alt) {
+-		if (clear)
+-			tclearregion(0, 0, term.col-1, term.row-1, 1);
+-		col = term.col, row = term.row;
+-		tswapscreen();
+-	}
+-	if (loadcursor)
+-		tcursor(CURSOR_LOAD);
+-	if (alt)
+-		tresizedef(col, row);
+-}
+-
+-void
+-tloadaltscreen(int clear, int savecursor)
+-{
+-	int col, row, def = !IS_SET(MODE_ALTSCREEN);
+-
+-	if (savecursor)
+-		tcursor(CURSOR_SAVE);
+-	if (def) {
+-		col = term.col, row = term.row;
+-		tswapscreen();
+-		term.scr = 0;
+-		tresizealt(col, row);
+-	}
+-	if (clear)
+-		tclearregion(0, 0, term.col-1, term.row-1, 1);
+-}
+-
+-int
+-tisaltscreen(void)
+-{
+-	return IS_SET(MODE_ALTSCREEN);
++	tfulldirt();
+ }
+ 
+ void
+@@ -1898,9 +1726,9 @@ csihandle(void)
+ 		break;
+ 	case 'n': /* DSR – Device Status Report (cursor position) */
+ 		if (csiescseq.arg[0] == 6) {
+-			n = snprintf(buf, sizeof(buf), "\033[%i;%iR",
++			len = snprintf(buf, sizeof(buf), "\033[%i;%iR",
+ 					term.c.y+1, term.c.x+1);
+-			ttywrite(buf, n, 0);
++			ttywrite(buf, len, 0);
+ 		}
+ 		break;
+ 	case 'r': /* DECSTBM -- Set Scrolling Region */
